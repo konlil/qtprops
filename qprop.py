@@ -6,21 +6,33 @@ PROP_FLOAT = 2
 PROP_STRING = 3
 PROP_BOOL = 4
 PROP_VECTOR3 = 5
+PROP_VECTOR4 = 6
 
 HORIZONTAL_HEADERS = ("Property", "Value")
 
 class PropItem(object):
-	def __init__(self, name, ptype, desc, default):
+	def __init__(self, name, ptype, desc, default, rmin=None, rmax=None):
 		self._name = name
 		self._ptype = ptype
 		self._desc = desc
 		self._default = default
 		self._data = default
+		self._range = (rmin, rmax)
 		self._children = []
 
 	@property
 	def value(self):
 		return self._data
+
+	@value.setter
+	def value(self, v):
+		self._data = v
+
+	@property
+	def limit(self):
+		if self._range[0] and self._range[1]:
+			return self._range
+		return None
 
 	@property
 	def key(self):
@@ -42,12 +54,16 @@ class GroupItem(PropItem):
 			self._data.append(child.value)
 		return self._data
 
+	@value.setter
+	def value(self, v):
+		self._data = v
+
 	@property
 	def children(self):
 		return self._children
 
-	def append(self, name, ptype, desc, default):
-		child = PropItem(name, ptype, desc, default)
+	def append(self, name, ptype, desc, default, rmin=None, rmax=None):
+		child = PropItem(name, ptype, desc, default, rmin, rmax)
 		self._children.append(child)
 		return self
 
@@ -68,6 +84,16 @@ class TreeItem(object):
 
 	def columnCount(self):
 		return 2
+
+	def ptype(self):
+		return self.prop._ptype
+
+	def setPropValue(self, v):
+		limit = self.prop.limit
+		if limit and not (v >= limit[0] and v <= limit[1]):
+			return False
+		self.prop.value = v
+		return True
 
 	def data(self, column):
 		if isinstance(self.prop, GroupItem):
@@ -96,10 +122,6 @@ class QPropModel(QtCore.QAbstractItemModel):
 		self._data = []
 		self.root = TreeItem(None, None)
 		self.parents = {0: self.root}
-#		self.regParam('pos', PROP_VECTOR3, {'x':0, 'y':0, 'z':0})
-#		self.regParam('yaw', PROP_FLOAT, 0.0)
-#		self.regParam('name', PROP_STRING, 'test')
-#		self.setupModelData()
 
 	def addProp(self, prop):
 		self._data.append(prop)
@@ -117,6 +139,10 @@ class QPropModel(QtCore.QAbstractItemModel):
 			return self.createIndex(row, column, child)
 		else:
 			return QtCore.QModelIndex()
+
+	def flags(self, index):
+		flag = super(QPropModel, self).flags(index)
+		return flag | QtCore.Qt.ItemIsEditable
 
 	def parent(self, index):
 		if not index.isValid():
@@ -162,10 +188,38 @@ class QPropModel(QtCore.QAbstractItemModel):
 		item = index.internalPointer()
 		if role == QtCore.Qt.DisplayRole:
 			return item.data(index.column())
+		elif role == QtCore.Qt.EditRole:
+			return item.data(index.column())
 		elif role == QtCore.Qt.UserRole:
 			if item:
-				return item.person
+				return item.prop
 		return QtCore.QVariant()
+
+	def setData(self, index, value, role=QtCore.Qt.EditRole):
+		if not index.isValid():
+			return False
+
+		#[TODO] handle success
+		success = False
+		item = index.internalPointer()
+		if role == QtCore.Qt.EditRole:
+			if item.ptype() == PROP_FLOAT:
+				v_float, ok = value.toDouble()
+				success = item.setPropValue( v_float )
+			elif item.ptype() == PROP_INT:
+				v_int, ok = value.toInt()
+				success = item.setPropValue( v_int )
+			elif item.ptype() == PROP_BOOL:
+				v_bool, ok = value.toBool()
+				success = item.setPropValue( v_bool )
+			elif item.ptype() == PROP_VECTOR3:
+				v_str = str(value.toString())
+				value = eval(v_str)
+				for i in xrange(len(value)):
+					ok = item.child(i).setPropValue(value[i])
+			self.dataChanged.emit(index, index)
+			return True
+		return False
 
 	def headerData(self, column, orientation, role):
 		if (orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole):
@@ -185,6 +239,13 @@ class QPropWidget(QtGui.QWidget):
 			.append('y', PROP_FLOAT, 'y', 0.0) \
 			.append('z', PROP_FLOAT, 'z', 0.0)
 		model.addProp(pos)
+
+		color = GroupItem('color', PROP_VECTOR4, u'ÑÕÉ«')
+		color.append('red', PROP_INT, 'red', 0, 0, 255) \
+			.append('green', PROP_INT, 'green', 0, 0, 255) \
+			.append('blue', PROP_INT, 'blue', 0, 0, 255) \
+			.append('alpha', PROP_INT, 'alpha', 255, 0, 255)
+		model.addProp(color)
 		model.addProp(PropItem('yaw', PROP_FLOAT, u'·½Ïò', 0.0))
 		model.setupModelData()
 		self.tree = QtGui.QTreeView(self)
