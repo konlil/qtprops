@@ -30,7 +30,7 @@ class PropItem(object):
 
 	@property
 	def limit(self):
-		if self._range[0] and self._range[1]:
+		if self._range[0] is not None and self._range[1] is not None:
 			return self._range
 		return None
 
@@ -199,7 +199,6 @@ class QPropModel(QtCore.QAbstractItemModel):
 		if not index.isValid():
 			return False
 
-		#[TODO] handle success
 		success = False
 		item = index.internalPointer()
 		if role == QtCore.Qt.EditRole:
@@ -210,13 +209,18 @@ class QPropModel(QtCore.QAbstractItemModel):
 				v_int, ok = value.toInt()
 				success = item.setPropValue( v_int )
 			elif item.ptype() == PROP_BOOL:
-				v_bool, ok = value.toBool()
+				v_bool = value.toBool()
 				success = item.setPropValue( v_bool )
 			elif item.ptype() == PROP_VECTOR3:
 				v_str = str(value.toString())
 				value = eval(v_str)
 				for i in xrange(len(value)):
 					ok = item.child(i).setPropValue(value[i])
+					if not ok:
+						success = False
+						break
+		print success
+		if success:
 			self.dataChanged.emit(index, index)
 			return True
 		return False
@@ -247,6 +251,7 @@ class QPropWidget(QtGui.QWidget):
 			.append('alpha', PROP_INT, 'alpha', 255, 0, 255)
 		model.addProp(color)
 		model.addProp(PropItem('yaw', PROP_FLOAT, u'方向', 0.0))
+		model.addProp(PropItem('pub', PROP_BOOL, u'发布', True))
 		model.setupModelData()
 		self.tree = QtGui.QTreeView(self)
 		self.tree.setModel(model)
