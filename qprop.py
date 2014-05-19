@@ -20,6 +20,9 @@ class PropItem(object):
 		self._range = (rmin, rmax)
 		self._children = []
 
+	def toQVariant(self):
+		return QtCore.QVariant(self._data)
+
 	@property
 	def value(self):
 		return self._data
@@ -46,6 +49,18 @@ class GroupItem(PropItem):
 	def __init__(self, name, ptype, desc):
 		super(GroupItem, self).__init__(name, ptype, desc, None)
 		self._children = []
+	
+	def toQVariant(self):
+		if self._ptype == PROP_VECTOR3:
+			v = self.value
+			obj = QtGui.QVector3D(v[0], v[1], v[2])
+			return QtCore.QVariant(obj)
+		elif self._ptype == PROP_VECTOR4:
+			v = self.value
+			obj = QtGui.QVector4D(v[0], v[1], v[2], v[3])
+			return QtCore.QVariant(obj)
+		else:
+			return QtCore.QVariant(self._data)
 
 	@property
 	def value(self):
@@ -95,6 +110,9 @@ class TreeItem(object):
 		self.prop.value = v
 		return True
 
+	def getProp(self):
+		return self.prop
+
 	def data(self, column):
 		if isinstance(self.prop, GroupItem):
 			if column == 0:
@@ -126,7 +144,7 @@ class QPropModel(QtCore.QAbstractItemModel):
 	def addProp(self, prop):
 		self._data.append(prop)
 
-	def index(self, row, column, parent):
+	def index(self, row, column, parent=QtCore.QModelIndex()):
 		if not self.hasIndex(row, column, parent):
 			return QtCore.QModelIndex()
 		if not parent.isValid():
@@ -155,7 +173,7 @@ class QPropModel(QtCore.QAbstractItemModel):
 			return QtCore.QModelIndex()
 		return self.createIndex(parent.row(), 0, parent)
 
-	def rowCount(self, parent):
+	def rowCount(self, parent=QtCore.QModelIndex()):
 		if parent.column() > 0:
 			return 0
 		if not parent.isValid():
@@ -182,7 +200,7 @@ class QPropModel(QtCore.QAbstractItemModel):
 		else:
 			return len(HORIZONTAL_HEADERS)
 
-	def data(self, index, role):
+	def data(self, index, role=QtCore.Qt.UserRole):
 		if not index.isValid():
 			return QtCore.QVariant()
 		item = index.internalPointer()
@@ -192,8 +210,17 @@ class QPropModel(QtCore.QAbstractItemModel):
 			return item.data(index.column())
 		elif role == QtCore.Qt.UserRole:
 			if item:
-				return item.prop
+				return item.getProp()
 		return QtCore.QVariant()
+
+	def getData(self):
+		data = {}
+		rows = self.rowCount()
+		for r in xrange(rows):
+			idx = self.index(r, 0)
+			prop = self.data(idx)
+			data[prop.key] = prop.value
+		return data
 
 	def setData(self, index, value, role=QtCore.Qt.EditRole):
 		if not index.isValid():
@@ -219,7 +246,6 @@ class QPropModel(QtCore.QAbstractItemModel):
 					if not ok:
 						success = False
 						break
-		print success
 		if success:
 			self.dataChanged.emit(index, index)
 			return True
@@ -256,7 +282,8 @@ class QPropWidget(QtGui.QWidget):
 		self.tree = QtGui.QTreeView(self)
 		self.tree.setModel(model)
 		self.tree.setAlternatingRowColors(True)
-
+		
+		self.model = model
 
 class Example(QtGui.QWidget):
 	def __init__(self):
@@ -264,8 +291,16 @@ class Example(QtGui.QWidget):
 		layout = QtGui.QVBoxLayout(self)
 		self.setLayout(layout)
 
-		prop = QPropWidget()
-		layout.addWidget(prop)
+		self.prop = QPropWidget()
+		layout.addWidget(self.prop)
+
+		button = QtGui.QPushButton()
+		button.setText('get data')
+		layout.addWidget(button)
+		button.clicked.connect(self.buttonClicked)
+
+	def buttonClicked(self):
+		print self.prop.model.getData()
 
 import sys
 if __name__ == '__main__':
