@@ -20,6 +20,9 @@ class PropItem(object):
 		self._range = (rmin, rmax)
 		self._children = []
 
+	def __str__(self):
+		return self._name
+
 	def toQVariant(self):
 		return QtCore.QVariant(self._data)
 
@@ -97,6 +100,15 @@ class TreeItem(object):
 	def childCount(self):
 		return len(self.childs)
 
+	def clear(self):
+		if self.childs:
+			for c in reversed(self.childs):
+				c.clear()
+		if self.parent:
+			self.parent.childs.remove(self)
+			self.parent = None
+			self.prop = None
+
 	def columnCount(self):
 		return 2
 
@@ -160,7 +172,10 @@ class QPropModel(QtCore.QAbstractItemModel):
 
 	def flags(self, index):
 		flag = super(QPropModel, self).flags(index)
-		return flag | QtCore.Qt.ItemIsEditable
+		if index.column() == 0:
+			return flag
+		else:
+			return flag | QtCore.Qt.ItemIsEditable
 
 	def parent(self, index):
 		if not index.isValid():
@@ -181,6 +196,10 @@ class QPropModel(QtCore.QAbstractItemModel):
 		else:
 			pitem = parent.internalPointer()
 		return pitem.childCount()
+
+	def clear(self):
+		self.root.clear()
+		self.reset()
 
 	def setupModelData(self):
 		for prop in self._data:
@@ -263,27 +282,33 @@ class QPropWidget(QtGui.QWidget):
 	def __init__(self, parent=None):
 		super(QPropWidget, self).__init__(parent)
 
-		model = QPropModel()
 		pos = GroupItem('pos', PROP_VECTOR3, u'位置')
 		pos.append('x', PROP_FLOAT, 'x', 0.0) \
 			.append('y', PROP_FLOAT, 'y', 0.0) \
 			.append('z', PROP_FLOAT, 'z', 0.0)
-		model.addProp(pos)
-
 		color = GroupItem('color', PROP_VECTOR4, u'颜色')
 		color.append('red', PROP_INT, 'red', 0, 0, 255) \
 			.append('green', PROP_INT, 'green', 0, 0, 255) \
 			.append('blue', PROP_INT, 'blue', 0, 0, 255) \
 			.append('alpha', PROP_INT, 'alpha', 255, 0, 255)
-		model.addProp(color)
-		model.addProp(PropItem('yaw', PROP_FLOAT, u'方向', 0.0))
-		model.addProp(PropItem('pub', PROP_BOOL, u'发布', True))
-		model.setupModelData()
+		self.model = QPropModel()
+		self.model.addProp(pos)
+		self.model.addProp(color)
+		self.model.addProp(PropItem('yaw', PROP_FLOAT, u'方向', 0.0))
+		self.model.addProp(PropItem('pub', PROP_BOOL, u'发布', True))
+		self.model.setupModelData()
 		self.tree = QtGui.QTreeView(self)
-		self.tree.setModel(model)
+		self.tree.setModel(self.model)
 		self.tree.setAlternatingRowColors(True)
 		
-		self.model = model
+	def getModel(self):
+		return self.model
+
+	def updateModel(self):
+		self.model.setupModelData()
+
+	def clearModel(self):
+		self.model.clear()
 
 class Example(QtGui.QWidget):
 	def __init__(self):
@@ -300,6 +325,8 @@ class Example(QtGui.QWidget):
 		button.clicked.connect(self.buttonClicked)
 
 	def buttonClicked(self):
+		print self.prop.model.getData()
+		self.prop.clearModel()
 		print self.prop.model.getData()
 
 import sys
